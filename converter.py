@@ -4,7 +4,7 @@ import re
 
 import yaml
 
-from config import CHILD_SUFFIXES, TYPE_TO_FILENAME
+from config import CHILD_SUFFIXES, KR_DIR, TYPE_TO_FILENAME
 
 # Unicode normalization map for middle dots
 _DOT_NORMALIZE = str.maketrans({
@@ -70,14 +70,23 @@ def get_law_path(law_name: str, law_type: str) -> str:
     Handles collisions: if two laws map to the same path (e.g., multiple
     시행규칙 from different ministries), appends a type qualifier like
     시행규칙(총리령).md / 시행규칙(부령).md.
+
+    Also checks the filesystem for pre-existing qualified paths from
+    previous import sessions (e.g., rebuild), so incremental updates
+    write to the correct file.
     """
     group, filename = get_group_and_filename(law_name, law_type)
+    qualified = f"kr/{group}/{filename}({law_type}).md"
+
+    # If a qualified path already exists on disk, use it
+    if (KR_DIR.parent / qualified).exists():
+        _assigned_paths[qualified] = (law_name, law_type)
+        return qualified
+
     path = f"kr/{group}/{filename}.md"
 
     existing = _assigned_paths.get(path)
     if existing is not None and existing != (law_name, law_type):
-        # Collision: qualify with law_type
-        qualified = f"kr/{group}/{filename}({law_type}).md"
         _assigned_paths[qualified] = (law_name, law_type)
         return qualified
 
