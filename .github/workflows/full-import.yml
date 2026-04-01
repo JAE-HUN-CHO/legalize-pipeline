@@ -48,15 +48,11 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
           path: docs-repo
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: workspace/scripts/requirements.txt
-
-      - name: Install dependencies
-        run: pip install -r workspace/scripts/requirements.txt
+      - name: Setup Python venv
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -r workspace/scripts/requirements.txt
 
       - name: Configure git
         working-directory: workspace
@@ -71,6 +67,7 @@ jobs:
           LAW_TYPE: ${{ inputs.law_type }}
           LIMIT: ${{ inputs.limit }}
         run: |
+          . ../../.venv/bin/activate
           ARGS=""
           if [ -n "$LAW_TYPE" ]; then ARGS="$ARGS --law-type $LAW_TYPE"; fi
           if [ -n "$LIMIT" ]; then ARGS="$ARGS --limit $LIMIT"; fi
@@ -78,7 +75,9 @@ jobs:
 
       - name: Validate
         working-directory: workspace/scripts
-        run: python validate.py
+        run: |
+          . ../../.venv/bin/activate
+          python validate.py
 
       - name: Push law changes
         working-directory: workspace
