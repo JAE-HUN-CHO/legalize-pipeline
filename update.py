@@ -123,7 +123,7 @@ def main():
 
     committed = update(days=args.days, law_type_filter=args.law_type, dry_run=args.dry_run)
 
-    if not args.dry_run and committed > 0:
+    if not args.dry_run:
         from generate_metadata import save as save_metadata
         save_metadata()
 
