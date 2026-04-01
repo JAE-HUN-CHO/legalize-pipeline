@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 60
 
     steps:
@@ -51,13 +51,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r workspace/scripts/requirements.txt
 
-      - name: Restore checkpoint
-        uses: actions/cache/restore@v4
-        with:
-          path: workspace/.checkpoint.json
-          key: checkpoint-dummy
-          restore-keys: checkpoint-
-
       - name: Configure git
         working-directory: workspace
         run: |
@@ -81,13 +74,6 @@ jobs:
           git diff --cached --quiet && echo "No changes to push" && exit 0
           git commit --author="Junghwan Park <reserve.dev@gmail.com>" -m "chore: daily law update $(date +%Y-%m-%d)"
           git push
-
-      - name: Save checkpoint
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: workspace/.checkpoint.json
-          key: checkpoint-${{ github.run_id }}
 
       - name: Update docs stats
         run: |
