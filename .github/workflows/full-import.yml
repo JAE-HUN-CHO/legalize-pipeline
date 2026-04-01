@@ -82,7 +82,7 @@ jobs:
       - name: Push law changes
         working-directory: workspace
         run: |
-          git add -A -- kr/ metadata.json
+          git add -A -- kr/
           git diff --cached --quiet && echo "No changes to push" && exit 0
           git commit --author="Junghwan Park <reserve.dev@gmail.com>" -m "chore: full import $(date +%Y-%m-%d)"
           git push
