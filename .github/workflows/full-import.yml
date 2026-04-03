@@ -60,7 +60,38 @@ jobs:
           git config user.name "legalize-kr-bot"
           git config user.email "bot@legalize.kr"
 
-      - name: Run import
+      - name: Build cache if missing
+        working-directory: workspace/scripts
+        env:
+          LAW_OC: ${{ secrets.LAW_OC }}
+        run: |
+          . ../../.venv/bin/activate
+          if [ ! -d "../.cache/detail" ] || [ -z "$(ls -A ../.cache/detail/ 2>/dev/null)" ]; then
+            echo "Cache missing or empty, building..."
+            python fetch_cache.py
+          else
+            echo "Cache exists ($(ls ../.cache/detail/*.xml 2>/dev/null | wc -l) detail files)"
+          fi
+
+      - name: Try download compiler
+        id: compiler
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT }}
+        run: |
+          ASSET_URL=$(gh api repos/legalize-kr/compiler/releases/latest \
+            --jq '.assets[] | select(.name | test("linux.*x86_64|x86_64.*linux")) | .browser_download_url' 2>/dev/null)
+          if [ -n "$ASSET_URL" ]; then
+            echo "Downloading compiler from $ASSET_URL"
+            curl -sL "$ASSET_URL" -o /tmp/legalize-compiler
+            chmod +x /tmp/legalize-compiler
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No compiler release found, will use rebuild.py"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild repository
         working-directory: workspace/scripts
         env:
           LAW_OC: ${{ secrets.LAW_OC }}
@@ -68,10 +99,13 @@ jobs:
           LIMIT: ${{ inputs.limit }}
         run: |
           . ../../.venv/bin/activate
-          ARGS=""
-          if [ -n "$LAW_TYPE" ]; then ARGS="$ARGS --law-type $LAW_TYPE"; fi
-          if [ -n "$LIMIT" ]; then ARGS="$ARGS --limit $LIMIT"; fi
-          python import_laws.py $ARGS
+          if [ "${{ steps.compiler.outputs.available }}" = "true" ]; then
+            echo "Running compiler..."
+            /tmp/legalize-compiler --cache ../.cache --output ..
+          else
+            echo "Running rebuild.py..."
+            python rebuild.py --branch rebuild
+          fi
 
       - name: Validate
         working-directory: workspace/scripts
@@ -79,13 +113,14 @@ jobs:
           . ../../.venv/bin/activate
           python validate.py
 
-      - name: Push law changes
+      - name: Force push rebuilt history
         working-directory: workspace
         run: |
-          git add -A -- kr/
-          git diff --cached --quiet && echo "No changes to push" && exit 0
-          git commit --author="Junghwan Park <reserve.dev@gmail.com>" -m "chore: full import $(date +%Y-%m-%d)"
-          git push
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$BRANCH" = "rebuild" ]; then
+            git branch -M rebuild main
+          fi
+          git push --force origin main
 
       - name: Update docs stats
         run: |
@@ -96,6 +131,6 @@ jobs:
             git config user.email "bot@legalize.kr"
             git add stats.json
             git diff --cached --quiet && echo "No docs changes" && exit 0
-            git commit --author="Junghwan Park <reserve.dev@gmail.com>" -m "chore: update stats.json"
+            git commit --author="legalize-kr-bot <bot@legalize.kr>" -m "chore: update stats.json"
             git push
           fi

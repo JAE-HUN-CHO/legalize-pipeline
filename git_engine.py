@@ -3,9 +3,8 @@
 import logging
 import os
 import subprocess
-from pathlib import Path
 
-from config import PROJECT_ROOT
+from config import BOT_AUTHOR, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +90,7 @@ def commit_law(
         "GIT_COMMITTER_DATE": iso_date,
     }
 
-    cmd = ["commit", "-m", message]
-    if author:
-        cmd.extend(["--author", author])
+    cmd = ["commit", "-m", message, "--author", author or BOT_AUTHOR]
     cmd.extend(["--", file_path])
 
     _run_git(*cmd, env=env)

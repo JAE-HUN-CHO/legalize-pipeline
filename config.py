@@ -41,3 +41,6 @@ TYPE_TO_FILENAME = {
     "감사원규칙": "감사원규칙",
     "선거관리위원회규칙": "선거관리위원회규칙",
 }
+
+# Bot identity for automated commits
+BOT_AUTHOR = "legalize-kr-bot <bot@legalize.kr>"

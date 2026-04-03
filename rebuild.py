@@ -16,7 +16,7 @@ from pathlib import Path
 
 import cache
 from api_client import get_law_detail
-from config import PROJECT_ROOT
+from config import BOT_AUTHOR, PROJECT_ROOT
 from converter import (
     format_date,
     get_law_path,
@@ -27,8 +27,7 @@ from import_laws import build_commit_msg
 
 logger = logging.getLogger(__name__)
 
-BOT_AUTHOR = "legalize-kr-bot <bot@legalize.kr>"
-INFRA_AUTHOR = "Junghwan Park <reserve.dev@gmail.com>"
+INFRA_AUTHOR = BOT_AUTHOR
 
 # Files/dirs to include in the infra commit (relative to PROJECT_ROOT)
 INFRA_PATHS = [

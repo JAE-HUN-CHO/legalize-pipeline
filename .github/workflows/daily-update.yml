@@ -70,10 +70,11 @@ jobs:
       - name: Push law changes
         working-directory: workspace
         run: |
-          git add -A -- kr/
-          git diff --cached --quiet && echo "No changes to push" && exit 0
-          git commit --author="Junghwan Park <reserve.dev@gmail.com>" -m "chore: daily law update $(date +%Y-%m-%d)"
-          git push
+          if [ -n "$(git log origin/main..HEAD --oneline)" ]; then
+            git push
+          else
+            echo "No new commits to push"
+          fi
 
       - name: Update docs stats
         run: |
@@ -84,6 +85,6 @@ jobs:
             git config user.email "bot@legalize.kr"
             git add stats.json
             git diff --cached --quiet && echo "No docs changes" && exit 0
-            git commit --author="Junghwan Park <reserve.dev@gmail.com>" -m "chore: update stats.json"
+            git commit --author="legalize-kr-bot <bot@legalize.kr>" -m "chore: update stats.json"
             git push
           fi
