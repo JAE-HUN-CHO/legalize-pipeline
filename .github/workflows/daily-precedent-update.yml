@@ -1,4 +1,4 @@
-name: Daily Precedent Update
+name: Daily Precedents Update
 
 on:
   schedule:
@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: precedent-update
+  group: precedents-update
   cancel-in-progress: false
 
 jobs:
@@ -79,7 +79,7 @@ jobs:
         working-directory: workspace
         run: |
           git add metadata.json stats.json
-          git diff --cached --quiet && echo "No metadata changes" && exit 0
+          git diff --staged --quiet && echo "No metadata changes" && exit 0
           git commit --author="legalize-kr-bot <bot@legalize.kr>" -m "chore: update metadata.json + stats.json"
 
       - name: Push changes

@@ -1,4 +1,4 @@
-name: Full Law Import
+name: Full Laws Import
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: law-update
+  group: laws-update
   cancel-in-progress: false
 
 jobs:

@@ -92,3 +92,34 @@ def test_fetch_detail_task_error_counted(tmp_path: Path):
 
     c, f, e = counter.snapshot()
     assert e == 1
+
+
+def test_fetch_detail_task_skips_known_no_result(tmp_path: Path):
+    """IDs in the negative cache set are skipped without calling the API."""
+    counter = Counter()
+    no_result = {"888"}
+
+    with patch("precedents.fetch_cache.get_precedent_detail") as mock_api:
+        fetch_cache_mod._fetch_detail_task("888", counter, no_result)
+
+    mock_api.assert_not_called()
+    assert counter.snapshot_all()["no_result"] == 1
+
+
+def test_fetch_detail_task_records_no_result(tmp_path: Path):
+    """NoResultError from the API persists the ID to the negative cache."""
+    from precedents.api_client import NoResultError
+    counter = Counter()
+    no_result: set[str] = set()
+
+    with patch(
+        "precedents.fetch_cache.get_precedent_detail",
+        side_effect=NoResultError("777", "no match"),
+    ):
+        fetch_cache_mod._fetch_detail_task("777", counter, no_result)
+
+    assert "777" in no_result
+    assert prec_cache.load_no_result_ids() == {"777"}
+    assert counter.snapshot_all()["no_result"] == 1
+    c, f, e = counter.snapshot()
+    assert e == 0  # no_result is not an error

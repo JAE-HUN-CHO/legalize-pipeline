@@ -50,7 +50,7 @@ precedents/            # 판례 파이프라인 (python -m precedents.fetch_cach
   converter.py         # XML → Markdown 변환 (frontmatter, 경로 계산, 충돌 처리)
   import_precedents.py # 캐시 → Markdown 일괄 변환 (병렬 쓰기)
   generate_metadata.py # metadata.json + stats.json 생성
-.github/workflows/     # CI/CD (daily-update.yml, full-import.yml)
+.github/workflows/     # CI/CD (daily-laws-update.yml, daily-precedent-update.yml, full-laws-import.yml)
 ```
 
 ### 런타임 워크스페이스
@@ -134,7 +134,7 @@ precedents/generate_metadata.py (metadata.json + stats.json)
 
 ## CI/CD
 
-### daily-update.yml (매일 13:00 KST)
+### daily-laws-update.yml (매일 13:00 KST)
 
 1. `legalize-kr/legalize-kr` → `workspace/`
 2. `legalize-kr/legalize-pipeline` → `workspace/pipeline/`
@@ -144,7 +144,7 @@ precedents/generate_metadata.py (metadata.json + stats.json)
 6. 데이터 저장소 push
 7. `stats.json` → `docs-repo/` 복사 및 push
 
-### full-import.yml (수동 실행)
+### full-laws-import.yml (수동 실행)
 
 동일 체크아웃 → 캐시 확인/수집 → compiler 또는 `python -m laws.rebuild` → validate → force push
 
@@ -250,3 +250,10 @@ python -m precedents.fetch_cache --workers 3
 
 - **다부처 법령**: `소관부처` 필드는 항상 YAML 리스트 형식
 - **알려진 제한**: 6개 MST 파싱 불가, 2개 MST 메타데이터 누락 (GitHub Issues 참조)
+- **판례 목록/상세 API 불일치 (업스트림)**: `lawSearch.do?target=prec`이 반환하는
+  `판례일련번호` 중 약 48,214건(2026-04-09, 전체 171,701건의 약 28%)이
+  `lawService.do?target=prec&ID=...`에서 `<Law>일치하는 판례가 없습니다...</Law>`
+  응답을 돌려준다. 결정적 업스트림 이슈이며 수집 버그가 아니다. `precedents/api_client.py`
+  의 `NoResultError`와 `.cache/precedent/_no_result_ids.txt` 네거티브 캐시로
+  격리한다. 기존 잘못된 캐시는 `python -m precedents.cleanup_no_result`로 이관
+  가능. 자세한 내용은 루트 `KNOWN_ISSUES.md` §10 참조.

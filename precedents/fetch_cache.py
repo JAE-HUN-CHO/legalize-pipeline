@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from core.counter import Counter
 
 from . import cache
-from .api_client import get_precedent_detail, search_precedents
+from .api_client import NoResultError, get_precedent_detail, search_precedents
 from .config import CONCURRENT_WORKERS, PREC_CACHE_DIR
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,26 @@ def fetch_all_ids() -> list[str]:
     return all_ids
 
 
-def _fetch_detail_task(prec_id: str, counter: Counter) -> None:
-    """Fetch a single precedent detail, skipping if already cached."""
+def _fetch_detail_task(
+    prec_id: str,
+    counter: Counter,
+    no_result_ids: set[str] | None = None,
+) -> None:
+    """Fetch a single precedent detail, skipping if already cached or known no-result."""
+    if no_result_ids is not None and prec_id in no_result_ids:
+        counter.inc("no_result")
+        return
     if cache.get_detail(prec_id) is not None:
         counter.inc("cached")
         return
     try:
         get_precedent_detail(prec_id)
         counter.inc("fetched")
+    except NoResultError:
+        cache.add_no_result_id(prec_id)
+        if no_result_ids is not None:
+            no_result_ids.add(prec_id)
+        counter.inc("no_result")
     except Exception as e:
         logger.error(f"Failed prec_id {prec_id}: {e}")
         counter.inc("errors")
@@ -113,26 +125,36 @@ def main():
         all_ids = all_ids[:args.limit]
 
     workers = args.workers
-    logger.info(f"Fetching detail for {len(all_ids)} precedents (workers={workers})...")
+    no_result_ids = cache.load_no_result_ids()
+    logger.info(
+        f"Fetching detail for {len(all_ids)} precedents "
+        f"(workers={workers}, known_no_result={len(no_result_ids)})..."
+    )
 
     counter = Counter()
     done = 0
     total = len(all_ids)
 
+    def _snapshot_line(prefix: str) -> str:
+        snap = counter.snapshot_all()
+        return (
+            f"{prefix}: {done}/{total} "
+            f"(cached={snap.get('cached', 0)}, fetched={snap.get('fetched', 0)}, "
+            f"no_result={snap.get('no_result', 0)}, errors={snap.get('errors', 0)})"
+        )
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_fetch_detail_task, prec_id, counter): prec_id
+            pool.submit(_fetch_detail_task, prec_id, counter, no_result_ids): prec_id
             for prec_id in all_ids
         }
         for future in as_completed(futures):
             future.result()
             done += 1
             if done % 500 == 0:
-                c, f, e = counter.snapshot()
-                logger.info(f"Progress: {done}/{total} (cached={c}, fetched={f}, errors={e})")
+                logger.info(_snapshot_line("Progress"))
 
-    c, f, e = counter.snapshot()
-    logger.info(f"Done: cached={c}, fetched={f}, errors={e}")
+    logger.info(_snapshot_line("Done"))
 
 
 if __name__ == "__main__":

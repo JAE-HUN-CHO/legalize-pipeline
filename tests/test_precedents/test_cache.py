@@ -34,3 +34,15 @@ def test_list_cached_ids(tmp_path: Path):
 def test_list_cached_ids_empty():
     result = prec_cache.list_cached_ids()
     assert result == []
+
+
+def test_no_result_ids_load_empty_when_missing():
+    assert prec_cache.load_no_result_ids() == set()
+
+
+def test_no_result_ids_add_and_load():
+    prec_cache.add_no_result_id("111")
+    prec_cache.add_no_result_id("222")
+    prec_cache.add_no_result_id("111")  # duplicate lines are fine; set dedupes
+    loaded = prec_cache.load_no_result_ids()
+    assert loaded == {"111", "222"}

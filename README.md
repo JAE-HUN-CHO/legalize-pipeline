@@ -243,14 +243,14 @@ WORKSPACE_ROOT=/path/to/legalize-kr
 
 ## CI/CD
 
-### daily-update.yml (매일 13:00 KST)
+### daily-laws-update.yml (매일 13:00 KST)
 
 1. 저장소 체크아웃
 2. `python -m laws.update` 실행 (최근 7일)
 3. `python -m laws.validate` 검증
 4. 변경사항 자동 push
 
-### full-import.yml (수동 실행)
+### full-laws-import.yml (수동 실행)
 
 1. 캐시 확인/수집
 2. `python -m laws.rebuild` 실행

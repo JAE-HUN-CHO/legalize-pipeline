@@ -61,3 +61,17 @@ def test_get_precedent_detail_from_cache(tmp_path: Path):
     result = prec_api.get_precedent_detail("123456")
     assert result == xml
     assert len(responses_lib.calls) == 0
+
+
+@responses_lib.activate
+def test_get_precedent_detail_no_result_raises_and_does_not_cache():
+    """Upstream returns <Law>일치하는 판례가 없습니다...</Law> for some IDs.
+
+    These must raise NoResultError and must not be stored in the positive cache.
+    """
+    bogus = b'<?xml version="1.0" encoding="utf-8"?><Law>\xec\x9d\xbc\xec\xb9\x98\xed\x95\x98\xeb\x8a\x94 \xed\x8c\x90\xeb\xa1\x80\xea\xb0\x80 \xec\x97\x86\xec\x8a\xb5\xeb\x8b\x88\xeb\x8b\xa4.</Law>'
+    responses_lib.add(responses_lib.GET, f"{LAW_API_BASE}/lawService.do", body=bogus, status=200)
+    with pytest.raises(prec_api.NoResultError) as excinfo:
+        prec_api.get_precedent_detail("999999")
+    assert excinfo.value.prec_id == "999999"
+    assert prec_cache.get_detail("999999") is None

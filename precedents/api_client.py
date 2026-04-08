@@ -89,11 +89,28 @@ def search_precedents(
     return {"totalCnt": int(total), "page": int(page_num), "precedents": precedents}
 
 
+class NoResultError(RuntimeError):
+    """Raised when the detail API returns a "no matching precedent" response.
+
+    The upstream API returns HTTP 200 with ``<Law>일치하는 판례가 없습니다...</Law>``
+    for certain IDs that the search API lists but the detail API cannot resolve.
+    These responses must not be cached as valid precedent XML.
+    """
+
+    def __init__(self, prec_id: str, message: str) -> None:
+        super().__init__(f"No precedent for ID {prec_id}: {message}")
+        self.prec_id = prec_id
+        self.message = message
+
+
 def get_precedent_detail(prec_id: str | int) -> bytes:
     """Fetch raw precedent detail XML by ID.
 
-    Checks cache first. Fetches from API if not cached, validates, stores to cache,
-    and returns raw XML bytes.
+    Checks cache first. Fetches from API if not cached, validates that the
+    response root tag is ``PrecService``, stores to cache, and returns raw
+    XML bytes. Raises :class:`NoResultError` for the "no matching precedent"
+    error response so the caller can record the ID in the negative cache
+    without polluting the positive cache.
     """
     prec_id = str(prec_id)
 
@@ -114,6 +131,11 @@ def get_precedent_detail(prec_id: str | int) -> bytes:
     result = root.findtext("result")
     if result and "실패" in result:
         raise RuntimeError(f"API error for prec_id {prec_id}: {result} - {root.findtext('msg', '')}")
+
+    if root.tag != "PrecService":
+        # Upstream returns <Law>일치하는 판례가 없습니다...</Law> for some IDs.
+        # Treat any non-PrecService root as a no-result response and do not cache.
+        raise NoResultError(prec_id, (root.text or "").strip() or f"unexpected root <{root.tag}>")
 
     cache.put_detail(prec_id, raw)
     return raw

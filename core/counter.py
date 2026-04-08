@@ -11,11 +11,21 @@ class Counter:
         self.cached = 0
         self.fetched = 0
         self.errors = 0
+        self._extra: dict[str, int] = {}
 
     def inc(self, field: str) -> None:
         with self._lock:
-            setattr(self, field, getattr(self, field) + 1)
+            if hasattr(self, field) and field != "_extra":
+                setattr(self, field, getattr(self, field) + 1)
+            else:
+                self._extra[field] = self._extra.get(field, 0) + 1
 
     def snapshot(self) -> tuple[int, int, int]:
         with self._lock:
             return self.cached, self.fetched, self.errors
+
+    def snapshot_all(self) -> dict[str, int]:
+        with self._lock:
+            result = {"cached": self.cached, "fetched": self.fetched, "errors": self.errors}
+            result.update(self._extra)
+            return result

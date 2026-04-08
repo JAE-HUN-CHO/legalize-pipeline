@@ -1,4 +1,4 @@
-name: Daily Law Update
+name: Daily Laws Update
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: law-update
+  group: laws-update
   cancel-in-progress: false
 
 jobs:
