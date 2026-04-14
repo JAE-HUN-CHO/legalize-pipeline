@@ -15,9 +15,6 @@ from .config import PRECEDENT_KR_DIR
 
 logger = logging.getLogger(__name__)
 
-METADATA_FILE = PRECEDENT_KR_DIR / "metadata.json"
-STATS_FILE = PRECEDENT_KR_DIR / "stats.json"
-
 
 def parse_frontmatter(file_path: Path) -> dict | None:
     """Extract YAML frontmatter from a Markdown file."""
@@ -86,7 +83,7 @@ def generate(output_dir: Path = PRECEDENT_KR_DIR) -> tuple[dict, int]:
 def build_stats(metadata: dict, skipped_errors: int) -> dict:
     """Build summary statistics from metadata index.
 
-    Court counts use court tier (first path component: 대법원/하급심/미분류).
+    Court counts use court tier (second path component: 대법원/하급심/미분류).
     """
     courts: dict[str, int] = {}
     case_types: dict[str, int] = {}
@@ -114,13 +111,13 @@ def save(output_dir: Path = PRECEDENT_KR_DIR) -> int:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    METADATA_FILE.write_text(
+    (output_dir / "metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
     stats = build_stats(metadata, skipped_errors)
-    STATS_FILE.write_text(
+    (output_dir / "stats.json").write_text(
         json.dumps(stats, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )

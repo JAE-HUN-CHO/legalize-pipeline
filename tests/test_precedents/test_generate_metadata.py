@@ -3,15 +3,7 @@
 import json
 from pathlib import Path
 
-import pytest
-
 import precedents.generate_metadata as gen_meta
-
-
-@pytest.fixture(autouse=True)
-def patch_dirs(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(gen_meta, "METADATA_FILE", tmp_path / "metadata.json")
-    monkeypatch.setattr(gen_meta, "STATS_FILE", tmp_path / "stats.json")
 
 
 def _write_precedent(path: Path, serial: str, case_type: str = "민사") -> None:

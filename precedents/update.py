@@ -18,7 +18,7 @@ from pathlib import Path
 from core.atomic_io import atomic_write_text
 
 from . import cache
-from .api_client import get_precedent_detail, search_precedents
+from .api_client import NoResultError, get_precedent_detail, search_precedents
 from .config import PRECEDENT_KR_DIR
 from .converter import (
     get_precedent_path,
@@ -72,7 +72,7 @@ def _collect_recent_ids(days: int) -> list[dict]:
 
 
 def run(
-    days: int = 30,
+    days: int = 180,
     dry_run: bool = False,
     output_dir: Path = PRECEDENT_KR_DIR,
 ) -> dict:
@@ -84,14 +84,22 @@ def run(
     logger.info(f"Found {len(recent)} precedents in last {days} days")
 
     if not recent:
-        return {"found": 0, "committed": 0, "errors": 0}
+        return {"found": 0, "committed": 0, "errors": 0, "no_result": 0}
+
+    # Known upstream no-result IDs (search lists them, detail cannot resolve).
+    no_result_ids = cache.load_no_result_ids()
 
     # Step 2: fetch detail for each and write/commit (git detects zero-diff)
     committed = 0
     errors = 0
+    no_result = 0
 
     for i, prec_meta in enumerate(recent, 1):
         prec_id = prec_meta["판례일련번호"]
+
+        if prec_id in no_result_ids:
+            no_result += 1
+            continue
 
         try:
             # Fetch detail (cache-aware: skips if already cached)
@@ -117,17 +125,27 @@ def run(
             if result:
                 committed += 1
 
+        except NoResultError:
+            cache.add_no_result_id(prec_id)
+            no_result_ids.add(prec_id)
+            no_result += 1
+            logger.debug(f"No-result prec_id {prec_id} recorded")
+
         except Exception as e:
             logger.error(f"Failed prec_id {prec_id}: {e}")
             errors += 1
 
         if i % 50 == 0:
-            logger.info(f"Progress: {i}/{len(recent)} (committed={committed})")
+            logger.info(
+                f"Progress: {i}/{len(recent)} "
+                f"(committed={committed}, no_result={no_result}, errors={errors})"
+            )
 
     stats = {
         "found": len(recent),
         "committed": committed,
         "errors": errors,
+        "no_result": no_result,
     }
     logger.info(f"Update done: {stats}")
     return stats
@@ -137,10 +155,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     parser = argparse.ArgumentParser(description="Incremental precedent update")
-    parser.add_argument("--days", type=int, default=30, help="Lookback days (default: 30)")
+    parser.add_argument("--days", type=int, default=180, help="Lookback days (default: 180)")
     parser.add_argument("--dry-run", action="store_true", help="Report without writing")
     parser.add_argument("--output-dir", type=Path, default=PRECEDENT_KR_DIR)
     args = parser.parse_args()
 
     stats = run(days=args.days, dry_run=args.dry_run, output_dir=args.output_dir)
-    print(f"found={stats['found']} committed={stats['committed']} errors={stats['errors']}")
+    print(
+        f"found={stats['found']} committed={stats['committed']} "
+        f"no_result={stats['no_result']} errors={stats['errors']}"
+    )
