@@ -24,7 +24,12 @@ from .import_laws import build_commit_msg
 logger = logging.getLogger(__name__)
 
 
-def update(days: int = 7, law_type_filter: str | None = None, dry_run: bool = False) -> int:
+def update(
+    days: int = 7,
+    law_type_filter: str | None = None,
+    dry_run: bool = False,
+    max_pages: int = 50,
+) -> int:
     """Query API for recently amended laws and import their latest versions."""
     if not LAW_API_KEY:
         logger.error("No API key (LAW_OC) configured. Cannot update.")
@@ -38,7 +43,9 @@ def update(days: int = 7, law_type_filter: str | None = None, dry_run: bool = Fa
 
     logger.info(f"Searching amendments from {since} to {today}")
 
-    # Collect all search results with their MSTs
+    # Collect all search results with their MSTs.
+    # Bounded-iteration invariant: abort if pagination exceeds max_pages to
+    # catch pagination regressions loudly (mirror of fetch_cache.py's invariant).
     all_laws: list[dict] = []
     page = 1
     while True:
@@ -46,6 +53,13 @@ def update(days: int = 7, law_type_filter: str | None = None, dry_run: bool = Fa
         all_laws.extend(result["laws"])
         if page * 100 >= result["totalCnt"]:
             break
+        if page >= max_pages:
+            raise RuntimeError(
+                f"laws.update pagination exceeded max_pages={max_pages} "
+                f"(totalCnt={result['totalCnt']}, collected={len(all_laws)}). "
+                f"Likely pagination regression, unexpected window size, or backfill — "
+                f"raise --max-pages explicitly if this is intentional."
+            )
         page += 1
 
     # Filter out already-processed MSTs via checkpoint (in-memory, no git log)
@@ -134,11 +148,26 @@ def main():
     parser.add_argument("--days", type=int, default=7, help="Look back N days (default: 7)")
     parser.add_argument("--law-type", help="Filter by 법령구분 (e.g., 법률)")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=50,
+        help=(
+            "Abort if pagination exceeds N pages (100 items/page). "
+            "Default 50 = 5000 items, sized for daily cron. "
+            "Raise for backfill (e.g. --days 3650 --max-pages 500)."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    committed = update(days=args.days, law_type_filter=args.law_type, dry_run=args.dry_run)
+    committed = update(
+        days=args.days,
+        law_type_filter=args.law_type,
+        dry_run=args.dry_run,
+        max_pages=args.max_pages,
+    )
 
     if not args.dry_run:
         from .generate_metadata import save as save_metadata
