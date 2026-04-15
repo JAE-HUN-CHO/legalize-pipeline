@@ -67,6 +67,17 @@ jobs:
           . ../../.venv/bin/activate
           python -m precedents.update --days ${{ inputs.days || '180' }}
 
+      - name: Validate filename byte-length invariant (NAME_MAX)
+        working-directory: workspace
+        run: |
+          over=$(LC_ALL=C find . -path ./.git -prune -o -type f -print \
+                 | awk -F/ '{ if (length($NF) > 255) print $0 }')
+          if [ -n "$over" ]; then
+            echo "::error::Filename(s) exceed 255 bytes (NAME_MAX):"
+            echo "$over"
+            exit 1
+          fi
+
       - name: Regenerate metadata
         working-directory: workspace/pipeline
         env:
