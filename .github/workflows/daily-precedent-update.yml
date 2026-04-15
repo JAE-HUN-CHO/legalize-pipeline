@@ -78,27 +78,26 @@ jobs:
             exit 1
           fi
 
-      - name: Regenerate metadata
-        working-directory: workspace/pipeline
-        env:
-          WORKSPACE_ROOT: ${{ github.workspace }}/workspace
-        run: |
-          . ../../.venv/bin/activate
-          python -m precedents.generate_metadata
-
-      - name: Stop tracking metadata.json and stats.json (one-time cleanup)
+      - name: Remove stale metadata.json and stats.json from precedent repo
         working-directory: workspace
         run: |
+          changed=0
           for f in metadata.json stats.json; do
-            git ls-files --error-unmatch "$f" >/dev/null 2>&1 && git rm --cached -f "$f" || true
-            grep -qxF "$f" .gitignore 2>/dev/null || echo "$f" >> .gitignore
+            if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+              git rm -f "$f"
+              changed=1
+            fi
+            if ! grep -qxF "$f" .gitignore 2>/dev/null; then
+              echo "$f" >> .gitignore
+              changed=1
+            fi
           done
-          git add .gitignore
-          if git diff --cached --quiet; then
-            echo "metadata.json/stats.json already untracked"
-          else
+          if [ "$changed" = "1" ]; then
+            git add .gitignore
             git commit --author="legalize-kr-bot <bot@legalize.kr>" \
               -m "chore: stop tracking metadata.json and stats.json"
+          else
+            echo "metadata.json/stats.json already absent and gitignored"
           fi
 
       - name: Push changes
@@ -110,18 +109,51 @@ jobs:
             echo "No new commits to push"
           fi
 
-      - name: Update docs precedent stats
+      - name: Regenerate precedent-stats.json in docs repo
+        env:
+          WORKSPACE_ROOT: ${{ github.workspace }}/workspace
         run: |
-          if [ -f workspace/stats.json ]; then
-            cd docs-repo
-            git fetch origin main
-            git reset --hard origin/main
-            # rename: precedent-kr/stats.json and laws stats.json collide in docs-repo root
-            cp ../workspace/stats.json precedent-stats.json
-            git add precedent-stats.json
-            git diff --staged --quiet && echo "No docs changes" && exit 0
-            git config user.name "legalize-kr-bot"
-            git config user.email "bot@legalize.kr"
-            git commit --author="legalize-kr-bot <bot@legalize.kr>" -m "chore: update precedent-stats.json"
-            git push origin main
+          cd docs-repo
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PYTHON_EOF'
+          import json
+          import os
+          from collections import Counter
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path(os.environ["WORKSPACE_ROOT"])
+          files = [
+              p for p in root.rglob("*.md")
+              if ".git" not in p.parts
+              and len(p.relative_to(root).parts) == 3
+          ]
+          case_types: Counter = Counter()
+          courts: Counter = Counter()
+          for p in files:
+              case_type, court_tier, _ = p.relative_to(root).parts
+              case_types[case_type] += 1
+              courts[court_tier] += 1
+
+          stats = {
+              "total": len(files),
+              "courts": dict(sorted(courts.items())),
+              "case_types": dict(sorted(case_types.items())),
+              "skipped_errors": 0,
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+          }
+          Path("precedent-stats.json").write_text(
+              json.dumps(stats, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          PYTHON_EOF
+          git add precedent-stats.json
+          if git diff --staged --quiet; then
+            echo "No docs changes"
+            exit 0
           fi
+          git config user.name "legalize-kr-bot"
+          git config user.email "bot@legalize.kr"
+          git commit --author="legalize-kr-bot <bot@legalize.kr>" -m "chore: update precedent-stats.json"
+          git push origin main
