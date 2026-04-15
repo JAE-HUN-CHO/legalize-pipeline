@@ -36,7 +36,7 @@ def test_a_single_empty_cache_raises_with_law_name():
 
     msg = str(exc.value)
     assert "주택법" in msg
-    assert "Empty (1)" in msg
+    assert "Unallowlisted empty (1)" in msg
 
 
 def test_b_single_malformed_cache_raises_with_path():
@@ -62,7 +62,7 @@ def test_c_mixed_empty_and_malformed_raises_single_error_naming_both():
     msg = str(exc.value)
     assert "주택법" in msg
     assert str(bad_path) in msg
-    assert "Empty (1)" in msg
+    assert "Unallowlisted empty (1)" in msg
     assert "Malformed (1)" in msg
 
 

@@ -33,9 +33,13 @@ def _assert_no_empty_history_cache() -> None:
     Turns silent cache poisoning into a loud end-of-run crash.
     Collects all offenders in a single pass for full visibility.
     """
+    from .history_allowlist import filter_and_check
+    from datetime import date
+
     empty: list[str] = []
     malformed: list[tuple[str, str]] = []
-    for name in cache.list_cached_history_names():
+    all_cached = cache.list_cached_history_names()
+    for name in all_cached:
         path = cache.history_path_for(name)
         if not path.exists():
             continue
@@ -47,12 +51,42 @@ def _assert_no_empty_history_cache() -> None:
             continue
         if data == []:
             empty.append(name)
-    if empty or malformed:
+
+    unallowed, expired, orphaned = filter_and_check(
+        empty_stems=empty,
+        all_cached_stems=all_cached,
+        today=date.today(),
+    )
+
+    # Informational: orphans do not fail the invariant.
+    for o in orphaned:
+        logger.warning(
+            f"::notice::allowlist_orphan stem={o['stem']} "
+            f"original_name={o['original_name']} "
+            f"tracking_issue={o['tracking_issue']} — "
+            f"cache file no longer present; candidate for removal from allowlist"
+        )
+
+    if unallowed or expired or malformed:
+        # R1: enrich with original_name and long-name recovery hint.
+        unallowed_render = [
+            f"{u['stem']} (hint: {u['original_name_hint']})" if u['original_name_hint']
+            else u['stem']
+            for u in unallowed
+        ]
+        expired_render = [
+            f"{e['stem']} [{e['original_name']}] tracking={e['tracking_issue']} expired={e['expires_on']}"
+            for e in expired
+        ]
         raise RuntimeError(
             f"History cache invariant violated. "
-            f"Empty ({len(empty)}): {empty}. "
+            f"Unallowlisted empty ({len(unallowed)}): {unallowed_render}. "
+            f"Expired allowlist entries ({len(expired)}): {expired_render}. "
             f"Malformed ({len(malformed)}): {malformed}. "
-            f"This indicates pagination regression or cache corruption."
+            f"This indicates pagination regression, cache corruption, or a stale allowlist. "
+            f"For stems matching '_<16hex>' suffix pattern: the law name exceeded 200 bytes "
+            f"and was hash-truncated by cache._safe_filename; cross-reference original_name "
+            f"via laws.api_client.search_laws."
         )
 
 
@@ -123,6 +157,14 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    # R7: pre-flight allowlist schema validation. Fail in <1s rather than after a 30-min crawl.
+    from .history_allowlist import load_allowlist
+    try:
+        load_allowlist()
+    except Exception as e:
+        logger.error(f"Allowlist pre-flight failed: {e}")
+        raise
 
     logger.info("Fetching law list...")
     all_laws = fetch_all_msts()
