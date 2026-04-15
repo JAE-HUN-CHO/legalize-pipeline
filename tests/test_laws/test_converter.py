@@ -1,5 +1,6 @@
 """Tests for laws/converter.py — pure logic, no external dependencies."""
 
+import datetime
 from pathlib import Path
 
 import pytest
@@ -223,8 +224,8 @@ def test_build_frontmatter_complete():
     assert fm["제목"] == "민법"
     assert fm["법령MST"] == 253527
     assert fm["소관부처"] == ["법무부"]
-    assert fm["공포일자"] == "2024-01-01"
-    assert fm["시행일자"] == "2024-01-01"
+    assert fm["공포일자"] == datetime.date(2024, 1, 1)
+    assert fm["시행일자"] == datetime.date(2024, 1, 1)
     assert fm["상태"] == "시행"
     assert "원본제목" not in fm
 

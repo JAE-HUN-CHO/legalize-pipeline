@@ -1,10 +1,27 @@
 """Convert law data to Markdown with YAML frontmatter."""
 
+import datetime
 import re
 
 import yaml
 
 from .config import CHILD_SUFFIXES, KR_DIR, TYPE_TO_FILENAME
+
+
+class _QuotedStr(str):
+    """str subclass that forces single-quoted YAML output via _LawDumper."""
+
+
+class _LawDumper(yaml.Dumper):
+    """Custom YAML dumper that single-quotes _QuotedStr values."""
+
+
+_LawDumper.add_representer(
+    _QuotedStr,
+    lambda dumper, value: dumper.represent_scalar(
+        "tag:yaml.org,2002:str", value, style="'"
+    ),
+)
 
 # Unicode normalization map for middle dots
 _DOT_NORMALIZE = str.maketrans({
@@ -31,6 +48,20 @@ def format_date(date_str: str) -> str:
     if not date_str or len(date_str) != 8:
         return date_str
     return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+
+
+def _to_date(date_str: str) -> datetime.date | str:
+    """Convert YYYY-MM-DD string to datetime.date for YAML date scalar output.
+
+    Returns the original string unchanged if empty or not a valid ISO date,
+    so callers need not guard against missing dates.
+    """
+    if not date_str:
+        return date_str
+    try:
+        return datetime.date.fromisoformat(date_str)
+    except ValueError:
+        return date_str
 
 
 def get_group_and_filename(law_name: str, law_type: str) -> tuple[str, str]:
@@ -102,13 +133,13 @@ def build_frontmatter(metadata: dict) -> dict:
     fm = {
         "제목": normalized_name,
         "법령MST": int(metadata.get("법령MST", 0)) if metadata.get("법령MST", "").isdigit() else metadata.get("법령MST", ""),
-        "법령ID": metadata.get("법령ID", ""),
+        "법령ID": _QuotedStr(metadata.get("법령ID", "")),
         "법령구분": metadata.get("법령구분", ""),
         "법령구분코드": metadata.get("법령구분코드", ""),
         "소관부처": parse_departments(metadata.get("소관부처명", "")),
-        "공포일자": format_date(metadata.get("공포일자", "")),
-        "공포번호": metadata.get("공포번호", ""),
-        "시행일자": format_date(metadata.get("시행일자", "")),
+        "공포일자": _to_date(format_date(metadata.get("공포일자", ""))),
+        "공포번호": _QuotedStr(metadata.get("공포번호", "")),
+        "시행일자": _to_date(format_date(metadata.get("시행일자", ""))),
         "법령분야": metadata.get("법령분야", ""),
         "상태": "시행",
         "출처": f"https://www.law.go.kr/법령/{normalized_name.replace(' ', '')}",
@@ -242,6 +273,7 @@ def law_to_markdown(detail: dict) -> str:
 
     yaml_str = yaml.dump(
         frontmatter,
+        Dumper=_LawDumper,
         allow_unicode=True,
         default_flow_style=False,
         sort_keys=False,
