@@ -14,6 +14,7 @@ Usage (from legalize-pipeline root):
 """
 
 import argparse
+import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +25,35 @@ from .config import CONCURRENT_WORKERS
 from core.counter import Counter
 
 logger = logging.getLogger(__name__)
+
+
+def _assert_no_empty_history_cache() -> None:
+    """Raise if any history cache file is empty [] or malformed JSON.
+
+    Turns silent cache poisoning into a loud end-of-run crash.
+    Collects all offenders in a single pass for full visibility.
+    """
+    empty: list[str] = []
+    malformed: list[tuple[str, str]] = []
+    for name in cache.list_cached_history_names():
+        path = cache.history_path_for(name)
+        if not path.exists():
+            continue
+        try:
+            with path.open(encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            malformed.append((str(path), str(e)))
+            continue
+        if data == []:
+            empty.append(name)
+    if empty or malformed:
+        raise RuntimeError(
+            f"History cache invariant violated. "
+            f"Empty ({len(empty)}): {empty}. "
+            f"Malformed ({len(malformed)}): {malformed}. "
+            f"This indicates pagination regression or cache corruption."
+        )
 
 
 def fetch_all_msts() -> list[dict]:
@@ -60,7 +90,7 @@ def _fetch_detail_task(mst: str, name: str, counter: Counter) -> None:
 def _fetch_history_task(name: str, counter: Counter, all_msts: list, msts_lock: threading.Lock) -> None:
     """Fetch history for a single law name."""
     try:
-        already_cached = cache.get_history(name) is not None
+        already_cached = bool(cache.get_history(name))
         entries = get_law_history(name)
         new_msts = [e.get("법령일련번호", "") for e in entries if e.get("법령일련번호")]
         with msts_lock:
@@ -170,6 +200,8 @@ def main():
 
     c, f, e = history_counter.snapshot()
     logger.info(f"History fetch done: cached={c}, fetched={f}, errors={e}, total_msts={len(all_msts)}")
+
+    _assert_no_empty_history_cache()
 
     # Step 2: Fetch detail for each MST found in history
     mst_list = sorted(set(all_msts))
